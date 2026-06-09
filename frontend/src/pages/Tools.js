@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import api from '../utils/api';
 import { t } from '../utils/i18n';
 
-const API_BASE = process.env.REACT_APP_API_URL?.replace('/api','') || 'http://localhost:5000';
+const API_BASE = process.env.REACT_APP_API_URL?.replace('/api','') || 'http://localhost:8080';
 
 const STATUS_MAP = {
   in_stock:  { label: 'На складе',  cls: 'badge-green',  dot: '🟢' },
