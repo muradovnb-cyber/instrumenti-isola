@@ -25,19 +25,15 @@ export default function Login() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1e293b 0%, #1a56db 100%)',
-      padding: '20px'
-    }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontSize: 56 }}>🏭</div>
-          <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 800, marginTop: 10 }}>{t('loginTitle')}</h1>
-          <p style={{ color: '#93c5fd', fontSize: 14, marginTop: 6 }}>{t('loginSubtitle')}</p>
+    <div className="login-screen">
+      <div className="login-screen-inner">
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ fontSize: 48 }}>🏭</div>
+          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 800, marginTop: 8 }}>{t('loginTitle')}</h1>
+          <p style={{ color: '#93c5fd', fontSize: 13, marginTop: 4 }}>{t('loginSubtitle')}</p>
         </div>
 
-        <div className="card" style={{ padding: '32px' }}>
+        <div className="card" style={{ padding: '24px' }}>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label className="form-label">👤 {t('username')}</label>
@@ -47,7 +43,12 @@ export default function Login() {
                 value={form.username}
                 onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
                 placeholder="director / chief / warehouse / master1"
-                required autoFocus
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                inputMode="text"
+                required
               />
             </div>
             <div className="form-group">
@@ -58,6 +59,7 @@ export default function Login() {
                 value={form.password}
                 onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
                 placeholder="admin123"
+                autoComplete="current-password"
                 required
               />
             </div>

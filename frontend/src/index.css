@@ -1,16 +1,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
-
-/* iOS safe areas (notch, Dynamic Island, домашняя черта) */
-@supports (padding: env(safe-area-inset-top)) {
-  body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
-}
+/* фон до краёв (за статус-баром / safe-area). Конкретные страницы перекрывают своим bg */
+html, body { background: #1e293b; }
 
 :root {
   --primary:   #1a56db;
@@ -329,6 +321,27 @@ tr:last-child td { border-bottom: none; }
   /* Удобные тап-таргеты на тач-устройствах */
   .btn { min-height: 42px; }
   .nav-item { padding: 12px 16px; }
+
+  /* safe-area для приложения в standalone-режиме (iPhone notch / Dynamic Island) */
+  .mobile-topbar { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .main-content  { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .sidebar       { padding-top: env(safe-area-inset-top); }
+}
+
+/* Контейнер логин-страницы — full-bleed гладиент + safe-area */
+.login-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(135deg, #1e293b 0%, #1a56db 100%);
+  padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+}
+.login-screen-inner {
+  width: 100%;
+  max-width: 420px;
+  margin: auto 0;
 }
 
 /* PWA install banner */
