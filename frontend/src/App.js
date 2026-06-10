@@ -18,8 +18,8 @@ function ProtectedLayout({ children, roles }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:16}}>
-      <div style={{fontSize:48}}>🏭</div>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100dvh',flexDirection:'column',gap:16,background:'#fff'}}>
+      <img src="/isola-tree.png" alt="ISOLA" style={{width:72,height:72,objectFit:'contain'}} />
       <div style={{color:'#6b7280'}}>Загрузка...</div>
     </div>
   );
@@ -33,7 +33,8 @@ function ProtectedLayout({ children, roles }) {
         {/* Mobile top bar */}
         <div className="mobile-topbar" style={{display:'none'}}>
           <button className="hamburger" onClick={() => setSidebarOpen(true)}>☰</button>
-          <h1>Инструменты цеха</h1>
+          <img src="/isola-tree.png" alt="" style={{width:22,height:22,objectFit:'contain'}} />
+          <h1>ISOLA Инструменты</h1>
         </div>
         <style>{`
           @media(max-width:768px){

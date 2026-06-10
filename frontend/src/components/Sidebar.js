@@ -45,9 +45,13 @@ export default function Sidebar({ open, onClose }) {
       {open && <div className="sidebar-overlay" onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.4)',zIndex:99}} />}
       <nav className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-logo">
-          <div className="icon">🏭</div>
+          <img
+            src="/isola-tree.png"
+            alt="ISOLA"
+            style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+          />
           <div>
-            <h1>Инструменты цеха</h1>
+            <h1>ISOLA Инструменты</h1>
             <p>Asboblar boshqaruvi</p>
           </div>
         </div>

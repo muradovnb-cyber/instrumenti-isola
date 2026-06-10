@@ -27,10 +27,21 @@ export default function Login() {
   return (
     <div className="login-screen">
       <div className="login-screen-inner">
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 48 }}>🏭</div>
-          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 800, marginTop: 8 }}>{t('loginTitle')}</h1>
-          <p style={{ color: '#93c5fd', fontSize: 13, marginTop: 4 }}>{t('loginSubtitle')}</p>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{
+            background: '#fff', borderRadius: 16, padding: '14px 20px',
+            display: 'inline-flex', alignItems: 'center',
+            boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+          }}>
+            <img
+              src="/isola-logo.jpg"
+              alt="ISOLA"
+              style={{ height: 56, width: 'auto', display: 'block' }}
+            />
+          </div>
+          <p style={{ color: '#d1fae5', fontSize: 13, marginTop: 12, fontWeight: 500 }}>
+            Управление инструментами цеха
+          </p>
         </div>
 
         <div className="card" style={{ padding: '24px' }}>

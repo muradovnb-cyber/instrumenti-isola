@@ -76,7 +76,7 @@ export default function InstallPrompt() {
         <div className="pwa-install-banner" role="dialog" aria-label="Установить приложение">
           <div className="icon">📲</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="title">Установить «Инструменты цеха»</div>
+            <div className="title">Установить «ISOLA Инструменты»</div>
             <div className="desc">
               {platform.isIOS
                 ? 'Запускайте с главного экрана как обычное приложение'

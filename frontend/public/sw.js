@@ -2,7 +2,7 @@
 // Стратегия: для html/css/js — network-first с офлайн-фолбэком,
 // для статики (иконки/шрифты) — cache-first. API НЕ кешируем.
 
-const VERSION = 'v3';
+const VERSION = 'v4-isola';
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
@@ -13,6 +13,8 @@ const PRECACHE = [
   '/icon-192.png',
   '/icon-512.png',
   '/apple-touch-icon.png',
+  '/isola-logo.jpg',
+  '/isola-tree.png',
 ];
 
 self.addEventListener('install', (event) => {

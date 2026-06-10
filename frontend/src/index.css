@@ -2,7 +2,7 @@
 
 html, body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
 /* фон до краёв (за статус-баром / safe-area). Конкретные страницы перекрывают своим bg */
-html, body { background: #1e293b; }
+html, body { background: #1e4132; }
 
 :root {
   --primary:   #1a56db;
@@ -335,7 +335,7 @@ tr:last-child td { border-bottom: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(135deg, #1e293b 0%, #1a56db 100%);
+  background: linear-gradient(135deg, #0f1f17 0%, #1e4132 50%, #2a6048 100%);
   padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
 }
 .login-screen-inner {

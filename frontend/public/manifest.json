@@ -1,6 +1,6 @@
 {
-  "short_name": "Инструменты",
-  "name": "Инструменты цеха — учёт и заявки",
+  "short_name": "ISOLA",
+  "name": "ISOLA Инструменты",
   "description": "Система управления инструментами производственного цеха: заявки мастеров, выдача со склада, штрафы за просрочку, инвентаризация",
   "lang": "ru",
   "dir": "ltr",
@@ -8,8 +8,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#1a56db",
-  "background_color": "#1e293b",
+  "theme_color": "#1e4132",
+  "background_color": "#ffffff",
   "categories": ["productivity", "business", "utilities"],
   "icons": [
     { "src": "/favicon-16.png",        "sizes": "16x16",   "type": "image/png" },
