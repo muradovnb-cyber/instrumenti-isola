@@ -165,14 +165,20 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user   ON notifications(user_id);
 -- ----------------------------------------------------------------
 -- НАЧАЛЬНЫЕ ДАННЫЕ (ON CONFLICT DO NOTHING — безопасно повторять)
 -- ----------------------------------------------------------------
+-- Пароль для всех seed-пользователей: admin123 (хеш верифицирован bcryptjs)
 INSERT INTO users (full_name, username, password, role, phone) VALUES
--- Пароль: admin123 (bcrypt hash)
-('Директор Алишер Каримов',   'director',  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW', 'director',          '+998901234567'),
-('Начальник Бобур Рахимов',   'chief',     '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW', 'production_chief',  '+998901234568'),
-('Складовщик Санжар Юсупов',  'warehouse', '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW', 'warehouse',         '+998901234569'),
-('Мастер Жавлон Мирзаев',     'master1',   '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW', 'master',            '+998901234570'),
-('Мастер Отабек Хасанов',     'master2',   '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW', 'master',            '+998901234571')
+('Директор Алишер Каримов',   'director',  '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.', 'director',          '+998901234567'),
+('Начальник Бобур Рахимов',   'chief',     '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.', 'production_chief',  '+998901234568'),
+('Складовщик Санжар Юсупов',  'warehouse', '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.', 'warehouse',         '+998901234569'),
+('Мастер Жавлон Мирзаев',     'master1',   '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.', 'master',            '+998901234570'),
+('Мастер Отабек Хасанов',     'master2',   '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.', 'master',            '+998901234571')
 ON CONFLICT (username) DO NOTHING;
+
+-- Self-heal: чинит пароли seed-аккаунтов в БД, где остался битый example-хеш.
+UPDATE users
+SET password = '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.'
+WHERE username IN ('director','chief','warehouse','master1','master2')
+  AND password = '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW';
 
 INSERT INTO tools (name, inventory_number, description, condition, status) VALUES
 ('Перфоратор Bosch GBH 2-26', 'INV-001', 'Профессиональный перфоратор, 800Вт', 'working',      'in_stock'),
