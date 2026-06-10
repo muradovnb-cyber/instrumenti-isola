@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
 import Sidebar from './components/Sidebar';
+import InstallPrompt from './components/InstallPrompt';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Tools from './pages/Tools';
@@ -80,6 +81,7 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <AppRoutes />
+          <InstallPrompt />
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
