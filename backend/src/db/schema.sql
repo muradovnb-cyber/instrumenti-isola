@@ -180,6 +180,28 @@ SET password = '$2a$10$gitvZVDi9wCRCujguBSQY.DF/80N0JbX0us/jgmiSn0dlACf9nD3.'
 WHERE username IN ('director','chief','warehouse','master1','master2')
   AND password = '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LPVsHGHzcyW';
 
+-- ----------------------------------------------------------------
+-- РЕАЛЬНЫЕ ПОЛЬЗОВАТЕЛИ ISOLA
+-- Пароль для всех: isola2026 (можно поменять позже через профиль)
+-- ----------------------------------------------------------------
+INSERT INTO users (full_name, username, password, role, department, phone) VALUES
+-- Директор
+('Нуриддин',  'nuriddin',  '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'director',         'Руководство', NULL),
+-- Начальник производства (тоже выдаёт инструменты)
+('Нодир',     'nodir',     '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'production_chief', 'Производство', NULL),
+-- Заведующий складом (выдаёт инструменты)
+('Илхом',     'ilhom',     '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'warehouse',        'Склад', NULL),
+-- Мастера / бригадиры
+('Улугбек',   'ulugbek',   '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'master',           'Бригада №1', NULL),
+('Киличбек',  'kilichbek', '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'master',           'Бригада №2', NULL),
+('Окилжон',   'okiljon',   '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'master',           'Бригада №3', NULL),
+('Акмал',     'akmal',     '$2a$10$WXUBskpm8PbPtuTC7kRiEuLjEOs7h1bXJ9ok2syhs3exwFtwCXF0S', 'master',           'Бригада №4', NULL)
+ON CONFLICT (username) DO NOTHING;
+
+-- Скрываем демо-аккаунты с логин-страницы (не удаляем — FK с заявками)
+UPDATE users SET is_active = FALSE
+WHERE username IN ('director','chief','warehouse','master1','master2');
+
 INSERT INTO tools (name, inventory_number, description, condition, status) VALUES
 ('Перфоратор Bosch GBH 2-26', 'INV-001', 'Профессиональный перфоратор, 800Вт', 'working',      'in_stock'),
 ('Болгарка DeWalt DWE402',    'INV-002', 'Угловая шлифмашина 125мм',            'working',      'in_stock'),

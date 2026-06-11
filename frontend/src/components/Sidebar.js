@@ -12,10 +12,10 @@ const ROLE_LABELS = {
 const NAV = [
   { to: '/',             icon: '🏠', key: 'dashboard',     roles: ['master','warehouse','production_chief','director'] },
   { to: '/tools',        icon: '🔧', key: 'tools',          roles: ['master','warehouse','production_chief','director'] },
-  { to: '/requests',     icon: '📝', key: 'requests',       roles: ['master','warehouse','production_chief','director'] },
-  { to: '/fines',        icon: '💰', key: 'fines',          roles: ['master','warehouse','production_chief','director'] },
+  { to: '/requests',     icon: '📋', key: 'requests',       roles: ['master','warehouse','production_chief','director'] },
+  { to: '/fines',        icon: '💳', key: 'fines',          roles: ['master','warehouse','production_chief','director'] },
   { to: '/inventory',    icon: '📦', key: 'inventory',      roles: ['warehouse','production_chief','director'] },
-  { to: '/analytics',    icon: '📊', key: 'analytics',      roles: ['production_chief','director'] },
+  { to: '/analytics',    icon: '📈', key: 'analytics',      roles: ['production_chief','director'] },
   { to: '/notifications',icon: '🔔', key: 'notifications',  roles: ['master','warehouse','production_chief','director'] },
 ];
 
@@ -52,7 +52,7 @@ export default function Sidebar({ open, onClose }) {
           />
           <div>
             <h1>ISOLA Инструменты</h1>
-            <p>Asboblar boshqaruvi</p>
+            <p>Учёт инструментов цеха</p>
           </div>
         </div>
 
@@ -65,7 +65,7 @@ export default function Sidebar({ open, onClose }) {
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
               onClick={onClose}
             >
-              <span>{item.icon}</span>
+              <span className="nav-icon">{item.icon}</span>
               <span>{t(item.key)}</span>
               {item.key === 'notifications' && unread > 0 && (
                 <span className="badge">{unread}</span>

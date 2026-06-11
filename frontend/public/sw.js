@@ -2,7 +2,7 @@
 // Стратегия: для html/css/js — network-first с офлайн-фолбэком,
 // для статики (иконки/шрифты) — cache-first. API НЕ кешируем.
 
-const VERSION = 'v4-isola';
+const VERSION = 'v5-isola-redesign';
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 

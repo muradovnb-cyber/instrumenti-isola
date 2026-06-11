@@ -1,24 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { t } from '../utils/i18n';
+
+const LAST_USERNAME_KEY = 'isola.lastUsername';
 
 export default function Login() {
   const [form, setForm] = useState({ username: '', password: '' });
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate  = useNavigate();
   const toast     = useToast();
+
+  // Подтянуть последний логин — пароль iOS/Chrome предложит сам через autocomplete
+  useEffect(() => {
+    const last = localStorage.getItem(LAST_USERNAME_KEY);
+    if (last) setForm(p => ({ ...p, username: last }));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
       await login(form.username, form.password);
+      if (remember) {
+        localStorage.setItem(LAST_USERNAME_KEY, form.username);
+      } else {
+        localStorage.removeItem(LAST_USERNAME_KEY);
+      }
       navigate('/');
     } catch (err) {
-      toast(err.response?.data?.error || t('error'), 'error');
+      toast(err.response?.data?.error || 'Ошибка входа', 'error');
     } finally {
       setLoading(false);
     }
@@ -27,33 +40,27 @@ export default function Login() {
   return (
     <div className="login-screen">
       <div className="login-screen-inner">
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{
-            background: '#fff', borderRadius: 16, padding: '14px 20px',
-            display: 'inline-flex', alignItems: 'center',
-            boxShadow: '0 8px 24px rgba(0,0,0,.18)',
-          }}>
-            <img
-              src="/isola-logo.jpg"
-              alt="ISOLA"
-              style={{ height: 56, width: 'auto', display: 'block' }}
-            />
+        <div className="login-logo-wrap">
+          <div className="logo-plate">
+            <img src="/isola-logo.jpg" alt="ISOLA" />
           </div>
-          <p style={{ color: '#d1fae5', fontSize: 13, marginTop: 12, fontWeight: 500 }}>
-            Управление инструментами цеха
-          </p>
+          <div className="login-tagline">Управление инструментами цеха</div>
         </div>
 
-        <div className="card" style={{ padding: '24px' }}>
+        <div className="login-card">
+          <h2>Вход в систему</h2>
+          <div className="login-card-sub">Введите логин и пароль</div>
+
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">👤 {t('username')}</label>
+              <label className="form-label">Логин</label>
               <input
                 className="form-input"
                 type="text"
+                name="username"
                 value={form.username}
                 onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
-                placeholder="director / chief / warehouse / master1"
+                placeholder="например, ulugbek"
                 autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -63,27 +70,41 @@ export default function Login() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">🔒 {t('password')}</label>
+              <label className="form-label">Пароль</label>
               <input
                 className="form-input"
                 type="password"
+                name="password"
                 value={form.password}
                 onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                placeholder="admin123"
+                placeholder="••••••••"
                 autoComplete="current-password"
                 required
               />
             </div>
-            <button className="btn btn-primary btn-lg" type="submit" disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}>
-              {loading ? '⏳ ...' : `🔑 ${t('login')}`}
+
+            <label className="form-checkbox" style={{ marginBottom: 18 }}>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={e => setRemember(e.target.checked)}
+              />
+              <span>Запомнить меня на этом устройстве</span>
+            </label>
+
+            <button
+              className="btn btn-primary btn-lg"
+              type="submit"
+              disabled={loading}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              {loading ? 'Вход…' : 'Войти'}
             </button>
           </form>
+        </div>
 
-          <div style={{ marginTop: 20, padding: 14, background: '#f0fdf4', borderRadius: 8, fontSize: 12, color: '#166534' }}>
-            <strong>Тест аккаунты (пароль: admin123):</strong><br />
-            director · chief · warehouse · master1 · master2
-          </div>
+        <div className="login-footer-note">
+          ISOLA Interior Solutions
         </div>
       </div>
     </div>
