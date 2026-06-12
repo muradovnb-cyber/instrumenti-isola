@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/Toast';
 import api, { formatSum, formatDate } from '../utils/api';
 import { t } from '../utils/i18n';
 
@@ -35,9 +36,45 @@ function getFirstName(fullName) {
 
 export default function Dashboard() {
   const { user }  = useAuth();
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState('');  // request id, на котором сейчас выполняется действие
+
+  const reload = () => {
+    const isMaster = user?.role === 'master';
+    return api.get('/requests', { params: isMaster ? {} : { status: 'issued' } })
+      .then(r => {
+        const activeStatuses = ['issued', 'return_requested', 'overdue'];
+        const filtered = isMaster
+          ? (r.data || []).filter(x => activeStatuses.includes(x.status))
+          : (r.data || []);
+        setMyRequests(filtered.slice(0, 5));
+      });
+  };
+
+  const handleRequestReturn = async (reqId) => {
+    setActing(reqId);
+    try {
+      await api.put(`/requests/${reqId}/request-return`);
+      toast('Склад уведомлён — ожидайте приёма', 'success');
+      await reload();
+    } catch (e) {
+      toast(e.response?.data?.error || 'Ошибка', 'error');
+    } finally { setActing(''); }
+  };
+
+  const handleCancelReturn = async (reqId) => {
+    setActing(reqId);
+    try {
+      await api.put(`/requests/${reqId}/cancel-return`);
+      toast('Запрос на приём отменён', 'info');
+      await reload();
+    } catch (e) {
+      toast(e.response?.data?.error || 'Ошибка', 'error');
+    } finally { setActing(''); }
+  };
 
   useEffect(() => {
     const isMaster = user?.role === 'master';
@@ -153,6 +190,7 @@ export default function Dashboard() {
                   <th>Заказ</th>
                   <th>Вернуть до</th>
                   <th>Статус</th>
+                  {isMaster && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -181,6 +219,28 @@ export default function Dashboard() {
                       <td>
                         <span className={`badge-status ${badge.cls}`}>{badge.label}</span>
                       </td>
+                      {isMaster && (
+                        <td style={{ textAlign: 'right' }}>
+                          {r.status === 'issued' && (
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={() => handleRequestReturn(r.id)}
+                              disabled={acting === r.id}
+                            >
+                              {acting === r.id ? '…' : 'Готов вернуть'}
+                            </button>
+                          )}
+                          {r.status === 'return_requested' && (
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => handleCancelReturn(r.id)}
+                              disabled={acting === r.id}
+                            >
+                              {acting === r.id ? '…' : 'Отменить запрос'}
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
