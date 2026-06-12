@@ -101,8 +101,13 @@ BEGIN
     ALTER TABLE tool_requests DROP CONSTRAINT IF EXISTS tool_requests_return_condition_check;
     ALTER TABLE tool_requests ADD CONSTRAINT tool_requests_return_condition_check
         CHECK (return_condition IS NULL OR return_condition IN ('working','needs_repair'));
+
+    -- Связь с заказом в ISOLA Business Suite
+    ALTER TABLE tool_requests ADD COLUMN IF NOT EXISTS external_order_id INT;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+CREATE INDEX IF NOT EXISTS idx_requests_external_order ON tool_requests(external_order_id);
 
 -- ----------------------------------------------------------------
 -- ШТРАФЫ

@@ -2,7 +2,7 @@
 // Стратегия: для html/css/js — network-first с офлайн-фолбэком,
 // для статики (иконки/шрифты) — cache-first. API НЕ кешируем.
 
-const VERSION = 'v7-batch-tools';
+const VERSION = 'v8-suite-link';
 const STATIC_CACHE = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 

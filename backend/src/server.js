@@ -24,6 +24,7 @@ app.use('/api/fines',         require('./routes/fines'));
 app.use('/api/inventory',     require('./routes/inventory'));
 app.use('/api/analytics',     require('./routes/analytics'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/external',      require('./routes/external'));
 
 // Health check
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }));

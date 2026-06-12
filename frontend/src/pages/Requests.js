@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import api, { formatDate, formatSum } from '../utils/api';
 import { t } from '../utils/i18n';
+import OrderPicker from '../components/OrderPicker';
 
 const STATUS_BADGE = {
   pending:          { cls: 'badge-blue',   label: 'Ожидает выдачи' },
@@ -21,7 +22,7 @@ function RequestForm({ tools, onSuccess, onClose }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({
-    order_number: '', usage_type: 'installation',
+    order_number: '', external_order_id: null, usage_type: 'installation',
     need_date: '', planned_return: '', notes: '', terms_accepted: false,
   });
   const [loading, setLoading] = useState(false);
@@ -124,11 +125,24 @@ function RequestForm({ tools, onSuccess, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Номер заказа / Объект *</label>
+              <OrderPicker
+                value={form.external_order_id}
+                orderNumber={form.order_number}
+                onChange={({ external_order_id, order_number }) =>
+                  setForm(p => ({ ...p, external_order_id, order_number: order_number || p.order_number }))}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Номер заказа / комментарий к объекту *</label>
               <input className="form-input" value={form.order_number}
                 onChange={e=>setForm(p=>({...p,order_number:e.target.value}))}
-                placeholder="ЗАК-2026-001 / Объект: ТЦ Сити" required />
-              <p className="form-hint">Один номер заказа объединит все выбранные инструменты в одной партии</p>
+                placeholder="ISOLA-5-2026 / Этаж 3, кухня" required />
+              <p className="form-hint">
+                {form.external_order_id
+                  ? `Привязано к заказу #${form.external_order_id} в Business Suite — можно дополнить (этаж, комната)`
+                  : 'Можно ввести вручную, если заказ ещё не заведён в Business Suite'}
+              </p>
             </div>
 
             <div className="form-group">
@@ -269,6 +283,34 @@ function RequestDetail({ req, onClose, onAction }) {
               {req.return_requested_at && ` (${new Date(req.return_requested_at).toLocaleString('ru-RU')})`}.
               {isWarehouseSide && ' Проверьте состояние и подтвердите приём.'}
               {isMaster && ' Ожидайте, склад проверит и подтвердит.'}
+            </div>
+          )}
+
+          {req.external_order_id && (
+            <div style={{
+              marginBottom: 14,
+              padding: '12px 14px',
+              background: 'var(--primary-l)',
+              borderRadius: 8,
+              border: '1px solid var(--isola-green-600)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, flexWrap: 'wrap',
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>
+                  Связано с заказом
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13.5 }}>
+                  Business Suite · #{req.external_order_id}
+                </div>
+              </div>
+              <a
+                href={`https://isola-business-suite-production.up.railway.app/?order=${req.external_order_id}`}
+                target="_blank" rel="noopener noreferrer"
+                className="btn btn-primary btn-sm"
+              >
+                Открыть в Business Suite ↗
+              </a>
             </div>
           )}
 

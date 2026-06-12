@@ -67,7 +67,7 @@ function plurInstr(n) {
 // POST /api/requests/batch — мастер берёт несколько инструментов одной заявкой
 // body: { tool_ids: [uuid], order_number, usage_type, need_date, planned_return, notes?, terms_accepted }
 router.post('/batch', authenticate, authorize('master'), async (req, res) => {
-  const { tool_ids, order_number, usage_type, need_date, planned_return, notes, terms_accepted } = req.body || {};
+  const { tool_ids, order_number, external_order_id, usage_type, need_date, planned_return, notes, terms_accepted } = req.body || {};
   if (!Array.isArray(tool_ids) || tool_ids.length === 0)
     return res.status(400).json({ error: 'Выберите хотя бы один инструмент' });
   if (!terms_accepted)
@@ -98,12 +98,13 @@ router.post('/batch', authenticate, authorize('master'), async (req, res) => {
 
     // Создаём N заявок в одной транзакции
     const created = [];
+    const extOrderId = Number.isInteger(external_order_id) ? external_order_id : null;
     for (const tid of uniqueIds) {
       const { rows } = await client.query(`
         INSERT INTO tool_requests
-          (tool_id, master_id, order_number, usage_type, need_date, planned_return, notes, terms_accepted)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
-      `, [tid, req.user.id, order_number, usage_type, need_date, planned_return, notes, true]);
+          (tool_id, master_id, order_number, external_order_id, usage_type, need_date, planned_return, notes, terms_accepted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+      `, [tid, req.user.id, order_number, extOrderId, usage_type, need_date, planned_return, notes, true]);
       created.push(rows[0]);
     }
 
@@ -197,7 +198,7 @@ router.put('/batch/request-return', authenticate, authorize('master'), async (re
 // POST /api/requests — подать заявку (мастер)
 router.post('/', authenticate, authorize('master'), async (req, res) => {
   try {
-    const { tool_id, order_number, usage_type, need_date, planned_return, notes, terms_accepted } = req.body;
+    const { tool_id, order_number, external_order_id, usage_type, need_date, planned_return, notes, terms_accepted } = req.body;
     if (!terms_accepted) return res.status(400).json({ error: 'Необходимо принять условия' });
 
     // Проверяем доступность инструмента
@@ -205,11 +206,12 @@ router.post('/', authenticate, authorize('master'), async (req, res) => {
     if (!tool) return res.status(404).json({ error: 'Инструмент не найден' });
     if (tool.status !== 'in_stock') return res.status(409).json({ error: 'Инструмент недоступен' });
 
+    const extOrderId = Number.isInteger(external_order_id) ? external_order_id : null;
     const { rows } = await db.query(`
       INSERT INTO tool_requests
-        (tool_id, master_id, order_number, usage_type, need_date, planned_return, notes, terms_accepted)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
-    `, [tool_id, req.user.id, order_number, usage_type, need_date, planned_return, notes, true]);
+        (tool_id, master_id, order_number, external_order_id, usage_type, need_date, planned_return, notes, terms_accepted)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+    `, [tool_id, req.user.id, order_number, extOrderId, usage_type, need_date, planned_return, notes, true]);
 
     // Уведомляем складовщика и начальника
     const managers = await db.query(
