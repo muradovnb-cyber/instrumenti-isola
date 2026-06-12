@@ -28,14 +28,20 @@ async function getCachedData(force = false) {
   return data;
 }
 
+// Активные заказы — те, по которым ещё ведётся работа
+// и под которые мастер может брать инструменты
+const ACTIVE_STATUSES = new Set(['active', 'in_progress']);
+
 // GET /api/external/orders — список заказов из Business Suite
+// По умолчанию — только активные. ?include=all чтобы получить все (debug).
 router.get('/orders', authenticate, async (req, res) => {
   try {
     const data = await getCachedData(req.query.fresh === '1');
     const clientsById = Object.fromEntries((data.cps || []).map(c => [c.id, c]));
     const usersById   = Object.fromEntries((data.users || []).map(u => [u.id, u]));
+    const includeAll  = req.query.include === 'all';
 
-    const orders = (data.orders || []).map(o => ({
+    const allOrders = (data.orders || []).map(o => ({
       id:       o.id,
       title:    o.title,
       status:   o.status,
@@ -53,16 +59,15 @@ router.get('/orders', authenticate, async (req, res) => {
       contract_no: `ISOLA-${o.id}-${new Date(o.created || Date.now()).getFullYear()}`,
     }));
 
-    // Свежие сверху, отменённые/закрытые в конце
-    const order = { active: 0, in_progress: 1, closed: 2, cancelled: 3 };
-    orders.sort((a, b) => {
-      const so = (order[a.status] ?? 99) - (order[b.status] ?? 99);
-      if (so !== 0) return so;
-      return (b.created || '').localeCompare(a.created || '');
-    });
+    const orders = includeAll ? allOrders : allOrders.filter(o => ACTIVE_STATUSES.has(o.status));
+
+    // Свежие сверху по created
+    orders.sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 
     res.json({
       orders,
+      total_in_suite: allOrders.length,
+      shown: orders.length,
       suite_url: SUITE_URL,
       cached_at: new Date(cache.fetchedAt).toISOString(),
     });

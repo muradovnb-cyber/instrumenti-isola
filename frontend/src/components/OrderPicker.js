@@ -171,8 +171,11 @@ export default function OrderPicker({ value, orderNumber, onChange }) {
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 autoFocus={false}
-                style={{ marginBottom: 12 }}
+                style={{ marginBottom: 8 }}
               />
+              <p className="form-hint" style={{ marginBottom: 12 }}>
+                Показаны только активные заказы из Business Suite
+              </p>
               {filtered.length === 0 ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
                   Ничего не нашлось
