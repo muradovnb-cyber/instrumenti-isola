@@ -41,6 +41,8 @@ export default function Dashboard() {
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState('');  // request id, на котором сейчас выполняется действие
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const reload = () => {
     const isMaster = user?.role === 'master';
@@ -74,6 +76,29 @@ export default function Dashboard() {
     } catch (e) {
       toast(e.response?.data?.error || 'Ошибка', 'error');
     } finally { setActing(''); }
+  };
+
+  const handleBatchReturn = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      const res = await api.put('/requests/batch/request-return', { request_ids: selectedIds });
+      toast(`Склад уведомлён — ${res.data.accepted} инстр. готовы к приёму`, 'success');
+      setSelectedIds([]);
+      await reload();
+    } catch (e) {
+      toast(e.response?.data?.error || 'Ошибка', 'error');
+    } finally { setBulkLoading(false); }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const issuedIds = myRequests.filter(r => r.status === 'issued').map(r => r.id);
+  const allIssuedSelected = issuedIds.length > 0 && issuedIds.every(id => selectedIds.includes(id));
+  const toggleSelectAll = () => {
+    setSelectedIds(allIssuedSelected ? [] : issuedIds);
   };
 
   useEffect(() => {
@@ -165,7 +190,18 @@ export default function Dashboard() {
             <span className="icon-pill">📋</span>
             {isMaster ? 'Мои активные инструменты' : 'Последние выдачи'}
           </h2>
-          <Link to="/requests" className="btn btn-secondary btn-sm">Все заявки →</Link>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {isMaster && selectedIds.length > 0 && (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleBatchReturn}
+                disabled={bulkLoading}
+              >
+                {bulkLoading ? '…' : `Сдать выбранные (${selectedIds.length})`}
+              </button>
+            )}
+            <Link to="/requests" className="btn btn-secondary btn-sm">Все заявки →</Link>
+          </div>
         </div>
 
         {myRequests.length === 0 ? (
@@ -185,6 +221,17 @@ export default function Dashboard() {
             <table>
               <thead>
                 <tr>
+                  {isMaster && issuedIds.length > 0 && (
+                    <th style={{width:32}}>
+                      <input
+                        type="checkbox"
+                        checked={allIssuedSelected}
+                        onChange={toggleSelectAll}
+                        style={{width:16,height:16,accentColor:'var(--isola-green-700)'}}
+                        title="Выбрать все выданные"
+                      />
+                    </th>
+                  )}
                   <th>Инструмент</th>
                   {!isMaster && <th>Мастер</th>}
                   <th>Заказ</th>
@@ -203,8 +250,21 @@ export default function Dashboard() {
                     : overdue
                     ? { cls: 'badge-red',  label: 'Просрочен' }
                     : { cls: 'badge-yellow', label: 'Выдан' };
+                  const canBatchSelect = isMaster && r.status === 'issued';
                   return (
                     <tr key={r.id} className={overdue ? 'row-overdue' : ''}>
+                      {isMaster && issuedIds.length > 0 && (
+                        <td>
+                          {canBatchSelect && (
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(r.id)}
+                              onChange={() => toggleSelect(r.id)}
+                              style={{width:16,height:16,accentColor:'var(--isola-green-700)'}}
+                            />
+                          )}
+                        </td>
+                      )}
                       <td>
                         <strong>{r.tool_name}</strong>
                         <br />

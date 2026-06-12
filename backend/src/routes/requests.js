@@ -55,6 +55,145 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
+// Склонение «инструмент» по числу
+function plurInstr(n) {
+  const last = n % 10, lastTwo = n % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'инструментов';
+  if (last === 1) return 'инструмент';
+  if (last >= 2 && last <= 4) return 'инструмента';
+  return 'инструментов';
+}
+
+// POST /api/requests/batch — мастер берёт несколько инструментов одной заявкой
+// body: { tool_ids: [uuid], order_number, usage_type, need_date, planned_return, notes?, terms_accepted }
+router.post('/batch', authenticate, authorize('master'), async (req, res) => {
+  const { tool_ids, order_number, usage_type, need_date, planned_return, notes, terms_accepted } = req.body || {};
+  if (!Array.isArray(tool_ids) || tool_ids.length === 0)
+    return res.status(400).json({ error: 'Выберите хотя бы один инструмент' });
+  if (!terms_accepted)
+    return res.status(400).json({ error: 'Необходимо принять условия использования' });
+
+  const uniqueIds = [...new Set(tool_ids)];
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Лочим записи инструментов, проверяем что все доступны
+    const { rows: tools } = await client.query(
+      'SELECT id, name, status FROM tools WHERE id = ANY($1::uuid[]) FOR UPDATE',
+      [uniqueIds]
+    );
+    if (tools.length !== uniqueIds.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Один или несколько инструментов не найдены' });
+    }
+    const unavailable = tools.filter(t => t.status !== 'in_stock');
+    if (unavailable.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: `Недоступны: ${unavailable.map(t => t.name).join(', ')}`
+      });
+    }
+
+    // Создаём N заявок в одной транзакции
+    const created = [];
+    for (const tid of uniqueIds) {
+      const { rows } = await client.query(`
+        INSERT INTO tool_requests
+          (tool_id, master_id, order_number, usage_type, need_date, planned_return, notes, terms_accepted)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
+      `, [tid, req.user.id, order_number, usage_type, need_date, planned_return, notes, true]);
+      created.push(rows[0]);
+    }
+
+    await client.query('COMMIT');
+
+    // Одно уведомление складу/начальнику/директору про всю партию
+    const managers = await db.query(
+      `SELECT id, telegram_id FROM users WHERE role IN ('warehouse','production_chief','director') AND is_active=TRUE`
+    );
+    const toolList = tools.map(t => t.name).join(', ');
+    for (const mgr of managers.rows) {
+      await sendNotification(mgr.id, 'new_request', {
+        title: `Новая заявка на ${uniqueIds.length} ${plurInstr(uniqueIds.length)}`,
+        message: `${req.user.full_name} запросил для заказа ${order_number}: ${toolList}`,
+        telegram_id: mgr.telegram_id,
+        metadata: { request_ids: created.map(r => r.id), order_number },
+      });
+    }
+
+    res.status(201).json({ created: created.length, requests: created });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Batch create error:', e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/requests/batch/request-return — мастер инициирует возврат нескольких сразу
+// body: { request_ids: [uuid] }
+router.put('/batch/request-return', authenticate, authorize('master'), async (req, res) => {
+  const { request_ids } = req.body || {};
+  if (!Array.isArray(request_ids) || request_ids.length === 0)
+    return res.status(400).json({ error: 'Выберите хотя бы одну заявку' });
+
+  const uniqueIds = [...new Set(request_ids)];
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: rs } = await client.query(
+      `SELECT r.*, t.name AS tool_name
+         FROM tool_requests r
+         JOIN tools t ON r.tool_id = t.id
+        WHERE r.id = ANY($1::uuid[])
+          AND r.master_id = $2
+          AND r.status = 'issued'
+        FOR UPDATE`,
+      [uniqueIds, req.user.id]
+    );
+    if (rs.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Нет ваших заявок в статусе «Выдан»' });
+    }
+
+    await client.query(
+      `UPDATE tool_requests
+          SET status='return_requested', return_requested_at=NOW(), updated_at=NOW()
+        WHERE id = ANY($1::uuid[])`,
+      [rs.map(r => r.id)]
+    );
+
+    await client.query('COMMIT');
+
+    // Одно уведомление складу про всю партию
+    const managers = await db.query(
+      `SELECT id, telegram_id FROM users WHERE role IN ('warehouse','production_chief','director') AND is_active=TRUE`
+    );
+    const toolList = rs.map(r => r.tool_name).join(', ');
+    for (const m of managers.rows) {
+      await sendNotification(m.id, 'return_requested', {
+        title: `Запрос на приём — ${rs.length} ${plurInstr(rs.length)}`,
+        message: `${req.user.full_name} готов сдать: ${toolList}`,
+        telegram_id: m.telegram_id,
+        metadata: { request_ids: rs.map(r => r.id) },
+      });
+    }
+
+    res.json({ accepted: rs.length, ids: rs.map(r => r.id) });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Batch return request error:', e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/requests — подать заявку (мастер)
 router.post('/', authenticate, authorize('master'), async (req, res) => {
   try {

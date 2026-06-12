@@ -15,63 +15,135 @@ const STATUS_BADGE = {
   overdue:          { cls: 'badge-red',    label: 'Просрочен' },
 };
 
-// ---- Форма новой заявки ----
+// ---- Форма новой заявки (мульти-выбор инструментов) ----
 function RequestForm({ tools, onSuccess, onClose }) {
   const toast = useToast();
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({
-    tool_id: '', order_number: '', usage_type: 'installation',
+    order_number: '', usage_type: 'installation',
     need_date: '', planned_return: '', notes: '', terms_accepted: false,
   });
   const [loading, setLoading] = useState(false);
 
+  const availableTools = tools
+    .filter(t => t.status === 'in_stock')
+    .filter(t => !search.trim() || (
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      (t.inventory_number || '').toLowerCase().includes(search.toLowerCase())
+    ));
+
+  const toggleTool = (id) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
+    if (selectedIds.length === 0) return toast('Выберите хотя бы один инструмент', 'error');
     if (!form.terms_accepted) return toast('Примите условия использования', 'error');
+
     setLoading(true);
     try {
-      await api.post('/requests', form);
-      toast('Заявка подана успешно!', 'success');
+      const res = await api.post('/requests/batch', {
+        tool_ids: selectedIds,
+        ...form,
+      });
+      toast(`Заявка подана: ${res.data.created} инстр.`, 'success');
       onSuccess();
     } catch (e) {
-      toast(e.response?.data?.error || t('error'), 'error');
+      toast(e.response?.data?.error || 'Ошибка', 'error');
     } finally { setLoading(false); }
   };
 
-  const availableTools = tools.filter(t => t.status === 'in_stock');
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
+      <div className="modal" style={{maxWidth:600}} onClick={e=>e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📝 Новая заявка на инструмент</h2>
+          <h2>Новая заявка{selectedIds.length > 0 && ` · выбрано ${selectedIds.length}`}</h2>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={submit}>
           <div className="modal-body">
+
+            {/* Tool multi-select */}
             <div className="form-group">
-              <label className="form-label">{t('selectTool')} *</label>
-              <select className="form-input form-select" value={form.tool_id}
-                onChange={e=>setForm(p=>({...p,tool_id:e.target.value}))} required>
-                <option value="">— Выберите —</option>
-                {availableTools.map(t => (
-                  <option key={t.id} value={t.id}>{t.name} ({t.inventory_number})</option>
-                ))}
-              </select>
-              {availableTools.length === 0 && <p className="form-hint">Нет доступных инструментов на складе</p>}
+              <label className="form-label">
+                Инструменты * <span style={{color:'var(--text-muted)',fontWeight:400}}>
+                  (можно выбрать несколько)
+                </span>
+              </label>
+              <input className="form-input" placeholder="Поиск по названию или инв. номеру…"
+                value={search} onChange={e=>setSearch(e.target.value)}
+                style={{marginBottom: 8}}
+                autoCapitalize="none" autoCorrect="off" />
+
+              {availableTools.length === 0 ? (
+                <div style={{padding:'14px',background:'var(--bg-warm)',borderRadius:8,
+                  border:'1px dashed var(--border)',fontSize:13,color:'var(--text-muted)',textAlign:'center'}}>
+                  {search ? 'Ничего не нашлось' : 'Нет доступных инструментов на складе'}
+                </div>
+              ) : (
+                <div style={{maxHeight:260,overflowY:'auto',border:'1px solid var(--border)',
+                  borderRadius:8,background:'#fff'}}>
+                  {availableTools.map(tool => {
+                    const checked = selectedIds.includes(tool.id);
+                    return (
+                      <label key={tool.id} style={{
+                        display:'flex',alignItems:'center',gap:12,
+                        padding:'10px 14px',cursor:'pointer',
+                        borderBottom:'1px solid var(--border)',
+                        background: checked ? 'var(--primary-l)' : '#fff',
+                      }}>
+                        <input type="checkbox" checked={checked} onChange={()=>toggleTool(tool.id)}
+                          style={{width:18,height:18,accentColor:'var(--isola-green-700)',flexShrink:0}} />
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:600,fontSize:13.5}}>{tool.name}</div>
+                          <div style={{fontSize:11.5,color:'var(--text-muted)',fontFamily:'SF Mono, Menlo, monospace'}}>
+                            {tool.inventory_number}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedIds.length > 0 && (
+                <div style={{marginTop:8,fontSize:12,color:'var(--isola-green-800)',fontWeight:600}}>
+                  Выбрано: {selectedIds.length} {' '}
+                  <button type="button"
+                    onClick={()=>setSelectedIds([])}
+                    style={{background:'none',border:'none',color:'var(--text-muted)',
+                      fontSize:12,textDecoration:'underline',cursor:'pointer'}}>
+                    очистить
+                  </button>
+                </div>
+              )}
             </div>
+
             <div className="form-group">
-              <label className="form-label">{t('orderNumber')} *</label>
+              <label className="form-label">Номер заказа / Объект *</label>
               <input className="form-input" value={form.order_number}
                 onChange={e=>setForm(p=>({...p,order_number:e.target.value}))}
-                placeholder="ЗАК-2024-001 / Объект: ТЦ Сити" required />
+                placeholder="ЗАК-2026-001 / Объект: ТЦ Сити" required />
+              <p className="form-hint">Один номер заказа объединит все выбранные инструменты в одной партии</p>
             </div>
+
             <div className="form-group">
-              <label className="form-label">{t('usageType')} *</label>
-              <div style={{display:'flex',gap:12}}>
-                {[['installation','🏗️ Монтаж'],['workshop','🏭 В цеху']].map(([val,lbl])=>(
-                  <label key={val} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',flex:1,
-                    padding:'9px 12px',border:`2px solid ${form.usage_type===val?'var(--primary)':'#e5e7eb'}`,
-                    borderRadius:8,fontWeight:form.usage_type===val?600:400}}>
+              <label className="form-label">Где будут использоваться *</label>
+              <div style={{display:'flex',gap:10}}>
+                {[['installation','Монтаж на объекте'],['workshop','Работа в цеху']].map(([val,lbl])=>(
+                  <label key={val} style={{
+                    flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,cursor:'pointer',
+                    padding:'10px 12px',
+                    border:`2px solid ${form.usage_type===val?'var(--isola-green-700)':'var(--border)'}`,
+                    background: form.usage_type===val ? 'var(--primary-l)' : '#fff',
+                    borderRadius:8,
+                    fontWeight: form.usage_type===val ? 600 : 500,
+                    fontSize: 13,
+                  }}>
                     <input type="radio" value={val} checked={form.usage_type===val}
                       onChange={()=>setForm(p=>({...p,usage_type:val}))} style={{display:'none'}} />
                     {lbl}
@@ -79,36 +151,47 @@ function RequestForm({ tools, onSuccess, onClose }) {
                 ))}
               </div>
             </div>
+
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div className="form-group">
-                <label className="form-label">{t('needDate')} *</label>
+                <label className="form-label">Когда нужен *</label>
                 <input type="date" className="form-input" value={form.need_date}
                   onChange={e=>setForm(p=>({...p,need_date:e.target.value}))}
-                  min={new Date().toISOString().split('T')[0]} required />
+                  min={today} required />
               </div>
               <div className="form-group">
-                <label className="form-label">{t('returnDate')} *</label>
+                <label className="form-label">Вернуть до *</label>
                 <input type="date" className="form-input" value={form.planned_return}
                   onChange={e=>setForm(p=>({...p,planned_return:e.target.value}))}
-                  min={form.need_date || new Date().toISOString().split('T')[0]} required />
+                  min={form.need_date || today} required />
               </div>
             </div>
+
             <div className="form-group">
-              <label className="form-label">{t('notes')}</label>
+              <label className="form-label">Заметка (опционально)</label>
               <textarea className="form-input" rows={2} value={form.notes}
-                onChange={e=>setForm(p=>({...p,notes:e.target.value}))} />
+                onChange={e=>setForm(p=>({...p,notes:e.target.value}))}
+                placeholder="Любая деталь, которую полезно знать складу" />
             </div>
-            <label style={{display:'flex',gap:10,cursor:'pointer',padding:'12px',
-              background:'#f0fdf4',borderRadius:8,border:'1.5px solid #bbf7d0'}}>
+
+            <label className="form-checkbox" style={{
+              padding:'12px 14px',background:'var(--success-bg)',
+              border:'1.5px solid var(--success)',borderRadius:8,
+              fontSize:13,color:'var(--success)',display:'flex',gap:10,
+            }}>
               <input type="checkbox" checked={form.terms_accepted}
                 onChange={e=>setForm(p=>({...p,terms_accepted:e.target.checked}))} />
-              <span style={{fontSize:13,color:'#166534'}}>{t('termsAccept')}</span>
+              <span>Принимаю ответственность за выбранные инструменты до момента приёмки складом</span>
             </label>
           </div>
+
           <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>{t('cancel')}</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? '⏳' : `📤 ${t('submit')}`}
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Отмена</button>
+            <button type="submit" className="btn btn-primary" disabled={loading || selectedIds.length === 0}>
+              {loading ? 'Отправка…'
+                : selectedIds.length === 0 ? 'Выберите инструменты'
+                : selectedIds.length === 1 ? 'Подать заявку'
+                : `Подать заявку (${selectedIds.length} инстр.)`}
             </button>
           </div>
         </form>
