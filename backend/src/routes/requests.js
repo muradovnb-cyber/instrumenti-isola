@@ -6,14 +6,16 @@ const { sendNotification } = require('../services/notificationService');
 const REQUEST_QUERY = `
   SELECT r.*,
     t.name AS tool_name, t.inventory_number, t.photo_url AS tool_photo,
-    m.full_name AS master_name,
+    m.full_name AS master_name, m.department AS master_department,
     w.full_name AS warehouse_name,
-    a.full_name AS approved_by_name
+    a.full_name AS approved_by_name,
+    ac.full_name AS accepted_by_name
   FROM tool_requests r
   JOIN tools t ON r.tool_id = t.id
   JOIN users m ON r.master_id = m.id
   LEFT JOIN users w ON r.warehouse_id = w.id
   LEFT JOIN users a ON r.approved_by = a.id
+  LEFT JOIN users ac ON r.accepted_by = ac.id
 `;
 
 // GET /api/requests
@@ -150,14 +152,73 @@ router.put('/:id/reject', authenticate, authorize('warehouse','production_chief'
   }
 });
 
-// PUT /api/requests/:id/return — возврат инструмента
+// PUT /api/requests/:id/request-return — мастер просит склад принять инструмент
+router.put('/:id/request-return', authenticate, authorize('master'), async (req, res) => {
+  try {
+    const r = (await db.query('SELECT * FROM tool_requests WHERE id=$1', [req.params.id])).rows[0];
+    if (!r) return res.status(404).json({ error: 'Заявка не найдена' });
+    if (r.master_id !== req.user.id) return res.status(403).json({ error: 'Это не ваша заявка' });
+    if (r.status !== 'issued') return res.status(409).json({ error: 'Заявка должна быть в статусе «Выдан»' });
+
+    await db.query(
+      `UPDATE tool_requests SET status='return_requested', return_requested_at=NOW(), updated_at=NOW()
+       WHERE id=$1`,
+      [req.params.id]
+    );
+
+    const tool = (await db.query('SELECT name FROM tools WHERE id=$1', [r.tool_id])).rows[0];
+    const managers = await db.query(
+      `SELECT id, telegram_id FROM users WHERE role IN ('warehouse','production_chief','director') AND is_active=TRUE`
+    );
+    for (const m of managers.rows) {
+      await sendNotification(m.id, 'return_requested', {
+        title: 'Запрос на приём инструмента',
+        message: `${req.user.full_name} готов вернуть «${tool.name}» (заказ ${r.order_number}). Проверьте и примите со склада.`,
+        telegram_id: m.telegram_id,
+        metadata: { request_id: r.id },
+      });
+    }
+
+    res.json({ message: 'Запрос на приём отправлен складу' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// PUT /api/requests/:id/cancel-return — мастер отменяет запрос на приём (передумал)
+router.put('/:id/cancel-return', authenticate, authorize('master'), async (req, res) => {
+  try {
+    const r = (await db.query('SELECT * FROM tool_requests WHERE id=$1', [req.params.id])).rows[0];
+    if (!r) return res.status(404).json({ error: 'Заявка не найдена' });
+    if (r.master_id !== req.user.id) return res.status(403).json({ error: 'Это не ваша заявка' });
+    if (r.status !== 'return_requested') return res.status(409).json({ error: 'Заявка не в статусе ожидания приёма' });
+
+    await db.query(
+      `UPDATE tool_requests SET status='issued', return_requested_at=NULL, updated_at=NOW() WHERE id=$1`,
+      [req.params.id]
+    );
+    res.json({ message: 'Запрос на приём отменён' });
+  } catch (e) {
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// PUT /api/requests/:id/return — склад принимает инструмент с проверкой состояния
+// body: { condition: 'working'|'needs_repair', return_notes?: string }
 router.put('/:id/return', authenticate, authorize('warehouse','production_chief','director'), async (req, res) => {
+  const condition = (req.body?.condition === 'needs_repair') ? 'needs_repair' : 'working';
+  const returnNotes = (req.body?.return_notes || '').trim() || null;
+
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
     const req_row = (await client.query('SELECT * FROM tool_requests WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0];
-    if (!req_row || req_row.status !== 'issued')
-      { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Инструмент не выдан' }); }
+    if (!req_row) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Заявка не найдена' }); }
+    if (!['issued','return_requested','overdue'].includes(req_row.status)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Инструмент не выдан или уже принят' });
+    }
 
     const today = new Date();
     const planned = new Date(req_row.planned_return);
@@ -165,19 +226,45 @@ router.put('/:id/return', authenticate, authorize('warehouse','production_chief'
     const fineAmount = overdueDays > 7 ? (overdueDays - 7) * 100000 : 0;
 
     await client.query(
-      `UPDATE tool_requests SET status='returned', actual_return=$1, returned_at=NOW(),
-       fine_days=$2, fine_amount=$3, updated_at=NOW() WHERE id=$4`,
-      [today.toISOString().split('T')[0], overdueDays, fineAmount, req.params.id]
+      `UPDATE tool_requests
+         SET status='returned',
+             actual_return=$1,
+             returned_at=NOW(),
+             accepted_by=$2,
+             return_condition=$3,
+             return_notes=$4,
+             fine_days=$5,
+             fine_amount=$6,
+             updated_at=NOW()
+       WHERE id=$7`,
+      [today.toISOString().split('T')[0], req.user.id, condition, returnNotes,
+       overdueDays, fineAmount, req.params.id]
     );
-    await client.query(
-      `UPDATE tools SET status='in_stock', assigned_to=NULL, updated_at=NOW() WHERE id=$1`,
-      [req_row.tool_id]
-    );
+
+    // Если требует ремонта — отправляем в ремонт, иначе в наличие
+    if (condition === 'needs_repair') {
+      await client.query(
+        `UPDATE tools SET status='in_repair', condition='needs_repair',
+                          assigned_to=NULL, updated_at=NOW() WHERE id=$1`,
+        [req_row.tool_id]
+      );
+    } else {
+      await client.query(
+        `UPDATE tools SET status='in_stock', assigned_to=NULL, updated_at=NOW() WHERE id=$1`,
+        [req_row.tool_id]
+      );
+    }
+
+    const historyNote = [
+      condition === 'needs_repair' ? 'Принят с дефектом → в ремонт' : 'Принят на склад',
+      overdueDays > 0 ? `просрочка ${overdueDays} дн.` : null,
+      returnNotes ? `Заметка: ${returnNotes}` : null,
+    ].filter(Boolean).join(' · ');
+
     await client.query(
       `INSERT INTO tool_history (tool_id, request_id, action, actor_id, notes)
        VALUES ($1,$2,'returned',$3,$4)`,
-      [req_row.tool_id, req.params.id, req.user.id,
-       overdueDays > 0 ? `Возврат с просрочкой ${overdueDays} дн.` : 'Инструмент возвращён']
+      [req_row.tool_id, req.params.id, req.user.id, historyNote]
     );
 
     if (fineAmount > 0) {
@@ -189,7 +276,26 @@ router.put('/:id/return', authenticate, authorize('warehouse','production_chief'
       );
     }
     await client.query('COMMIT');
-    res.json({ message: 'Инструмент принят', overdue_days: overdueDays, fine_amount: fineAmount });
+
+    // Уведомить мастера о приёме
+    const master = (await db.query('SELECT telegram_id FROM users WHERE id=$1', [req_row.master_id])).rows[0];
+    const tool = (await db.query('SELECT name FROM tools WHERE id=$1', [req_row.tool_id])).rows[0];
+    const msgParts = [`Склад принял «${tool.name}» (${condition === 'needs_repair' ? 'отмечен как требующий ремонта' : 'в рабочем состоянии'}).`];
+    if (overdueDays > 0) msgParts.push(`Просрочка: ${overdueDays} дн.`);
+    if (fineAmount > 0) msgParts.push(`Начислен штраф: ${fineAmount.toLocaleString()} сум.`);
+    await sendNotification(req_row.master_id, 'return_accepted', {
+      title: 'Инструмент принят складом',
+      message: msgParts.join(' '),
+      telegram_id: master?.telegram_id,
+      metadata: { request_id: req.params.id, condition, fine: fineAmount },
+    });
+
+    res.json({
+      message: 'Инструмент принят',
+      condition,
+      overdue_days: overdueDays,
+      fine_amount: fineAmount
+    });
   } catch (e) {
     await client.query('ROLLBACK');
     console.error(e);

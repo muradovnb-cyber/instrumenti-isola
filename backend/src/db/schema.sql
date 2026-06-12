@@ -54,17 +54,21 @@ CREATE TABLE IF NOT EXISTS tool_requests (
     order_number     VARCHAR(200) NOT NULL,
     usage_type       VARCHAR(50) NOT NULL CHECK (usage_type IN ('installation','workshop')),
     status           VARCHAR(50) NOT NULL DEFAULT 'pending'
-                     CHECK (status IN ('pending','approved','issued','returned','rejected','overdue')),
+                     CHECK (status IN ('pending','approved','issued','return_requested','returned','rejected','overdue')),
 
     need_date        DATE NOT NULL,
     planned_return   DATE NOT NULL,
     actual_return    DATE,
     issued_at        TIMESTAMPTZ,
+    return_requested_at TIMESTAMPTZ,
     returned_at      TIMESTAMPTZ,
+    accepted_by      UUID REFERENCES users(id) ON DELETE SET NULL,
 
     terms_accepted   BOOLEAN NOT NULL DEFAULT FALSE,
     notes            TEXT,
     rejection_reason TEXT,
+    return_condition VARCHAR(50) CHECK (return_condition IS NULL OR return_condition IN ('working','needs_repair')),
+    return_notes     TEXT,
 
     fine_amount      BIGINT DEFAULT 0,  -- в сумах
     fine_days        INT DEFAULT 0,
@@ -72,6 +76,33 @@ CREATE TABLE IF NOT EXISTS tool_requests (
     created_at       TIMESTAMPTZ DEFAULT NOW(),
     updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Миграция для уже существующих БД: добавить новый статус и поля
+DO $$
+BEGIN
+    -- Новые колонки (idempotent)
+    ALTER TABLE tool_requests ADD COLUMN IF NOT EXISTS return_requested_at TIMESTAMPTZ;
+    ALTER TABLE tool_requests ADD COLUMN IF NOT EXISTS accepted_by UUID REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE tool_requests ADD COLUMN IF NOT EXISTS return_condition VARCHAR(50);
+    ALTER TABLE tool_requests ADD COLUMN IF NOT EXISTS return_notes TEXT;
+
+    -- Пересоздать CHECK status с новым значением return_requested
+    IF EXISTS (
+        SELECT 1 FROM information_schema.constraint_column_usage
+        WHERE table_name = 'tool_requests'
+          AND constraint_name LIKE '%tool_requests_status_check%'
+    ) THEN
+        ALTER TABLE tool_requests DROP CONSTRAINT IF EXISTS tool_requests_status_check;
+    END IF;
+    ALTER TABLE tool_requests ADD CONSTRAINT tool_requests_status_check
+        CHECK (status IN ('pending','approved','issued','return_requested','returned','rejected','overdue'));
+
+    -- CHECK для return_condition
+    ALTER TABLE tool_requests DROP CONSTRAINT IF EXISTS tool_requests_return_condition_check;
+    ALTER TABLE tool_requests ADD CONSTRAINT tool_requests_return_condition_check
+        CHECK (return_condition IS NULL OR return_condition IN ('working','needs_repair'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ----------------------------------------------------------------
 -- ШТРАФЫ

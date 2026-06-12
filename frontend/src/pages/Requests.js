@@ -6,12 +6,13 @@ import api, { formatDate, formatSum } from '../utils/api';
 import { t } from '../utils/i18n';
 
 const STATUS_BADGE = {
-  pending:  { cls: 'badge-blue',   label: '⏳ Ожидает' },
-  approved: { cls: 'badge-green',  label: '✅ Одобрено' },
-  issued:   { cls: 'badge-red',    label: '🔴 Выдан' },
-  returned: { cls: 'badge-green',  label: '✅ Возвращён' },
-  rejected: { cls: 'badge-gray',   label: '❌ Отклонён' },
-  overdue:  { cls: 'badge-red',    label: '⚠️ Просрочен' },
+  pending:          { cls: 'badge-blue',   label: 'Ожидает выдачи' },
+  approved:         { cls: 'badge-green',  label: 'Одобрено' },
+  issued:           { cls: 'badge-yellow', label: 'Выдан мастеру' },
+  return_requested: { cls: 'badge-blue',   label: 'Готов к приёмке' },
+  returned:         { cls: 'badge-green',  label: 'Принят' },
+  rejected:         { cls: 'badge-gray',   label: 'Отклонён' },
+  overdue:          { cls: 'badge-red',    label: 'Просрочен' },
 };
 
 // ---- Форма новой заявки ----
@@ -122,22 +123,43 @@ function RequestDetail({ req, onClose, onAction }) {
   const toast    = useToast();
   const [reject, setReject] = useState(false);
   const [reason, setReason] = useState('');
+  const [accepting, setAccepting] = useState(false);  // склад открыл форму приёма
+  const [acceptCondition, setAcceptCondition] = useState('working');
+  const [acceptNotes, setAcceptNotes] = useState('');
   const [loading, setLoading] = useState('');
 
-  const canAct = ['warehouse','production_chief','director'].includes(user?.role);
+  const isMaster = user?.role === 'master';
+  const isWarehouseSide = ['warehouse','production_chief','director'].includes(user?.role);
   const days = Math.floor((new Date() - new Date(req.planned_return)) / 86400000);
+  const isOverdue = days > 0 && (req.status === 'issued' || req.status === 'return_requested');
+  const projectedFine = days > 7 ? (days - 7) * 100000 : 0;
 
   const action = async (type) => {
     setLoading(type);
     try {
-      if (type === 'approve') await api.put(`/requests/${req.id}/approve`);
-      else if (type === 'reject') await api.put(`/requests/${req.id}/reject`, { rejection_reason: reason });
-      else if (type === 'return') await api.put(`/requests/${req.id}/return`);
-      toast(type === 'return' ? 'Инструмент принят' : type === 'approve' ? 'Выдан!' : 'Отклонено', 'success');
+      if (type === 'approve')        await api.put(`/requests/${req.id}/approve`);
+      else if (type === 'reject')    await api.put(`/requests/${req.id}/reject`, { rejection_reason: reason });
+      else if (type === 'request-return') await api.put(`/requests/${req.id}/request-return`);
+      else if (type === 'cancel-return')  await api.put(`/requests/${req.id}/cancel-return`);
+      else if (type === 'accept-return')  await api.put(`/requests/${req.id}/return`, {
+        condition: acceptCondition,
+        return_notes: acceptNotes,
+      });
+
+      const msgs = {
+        'approve':        'Инструмент выдан мастеру',
+        'reject':         'Заявка отклонена',
+        'request-return': 'Запрос на приём отправлен складу',
+        'cancel-return':  'Запрос на приём отменён',
+        'accept-return':  acceptCondition === 'needs_repair'
+                            ? 'Принят, инструмент отправлен в ремонт'
+                            : 'Инструмент принят на склад',
+      };
+      toast(msgs[type] || 'Готово', 'success');
       onAction();
       onClose();
     } catch (e) {
-      toast(e.response?.data?.error || t('error'), 'error');
+      toast(e.response?.data?.error || 'Ошибка', 'error');
     } finally { setLoading(''); }
   };
 
@@ -147,86 +169,175 @@ function RequestDetail({ req, onClose, onAction }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-header">
-          <h2>📋 Заявка №{req.id.slice(-6).toUpperCase()}</h2>
+          <h2>Заявка №{req.id.slice(-6).toUpperCase()}</h2>
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-            <span className={`badge-status ${st.cls}`} style={{fontSize:14,padding:'6px 14px'}}>{st.label}</span>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,gap:12,flexWrap:'wrap'}}>
+            <span className={`badge-status ${st.cls}`} style={{fontSize:13,padding:'5px 12px'}}>{st.label}</span>
             <span className="text-muted" style={{fontSize:12}}>{new Date(req.created_at).toLocaleString('ru-RU')}</span>
           </div>
 
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          {/* Подсказка по статусу */}
+          {req.status === 'return_requested' && (
+            <div style={{marginBottom:16,padding:'12px 14px',background:'var(--info-bg)',borderRadius:8,
+              borderLeft:'3px solid var(--info)',fontSize:13,color:'var(--info)'}}>
+              <strong>Готов к приёмке.</strong> Мастер {req.master_name.split(' ')[0]} сообщил, что готов сдать инструмент
+              {req.return_requested_at && ` (${new Date(req.return_requested_at).toLocaleString('ru-RU')})`}.
+              {isWarehouseSide && ' Проверьте состояние и подтвердите приём.'}
+              {isMaster && ' Ожидайте, склад проверит и подтвердит.'}
+            </div>
+          )}
+
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             {[
-              ['🔧 Инструмент', req.tool_name],
-              ['#️⃣ Инв. номер', req.inventory_number],
-              ['👤 Мастер', req.master_name],
-              ['📦 Заказ', req.order_number],
-              ['🏗️ Цель', req.usage_type === 'installation' ? 'Монтаж' : 'Цех'],
-              ['📅 Нужен с', formatDate(req.need_date)],
-              ['📅 Вернуть до', formatDate(req.planned_return)],
-              ['📅 Выдан', req.issued_at ? new Date(req.issued_at).toLocaleString('ru-RU') : '—'],
-              req.actual_return && ['📅 Возвращён', formatDate(req.actual_return)],
-              req.fine_amount > 0 && ['💰 Штраф', formatSum(req.fine_amount)],
+              ['Инструмент', req.tool_name],
+              ['Инв. номер', req.inventory_number],
+              ['Мастер', req.master_name + (req.master_department ? ` · ${req.master_department}` : '')],
+              ['Заказ', req.order_number],
+              ['Цель', req.usage_type === 'installation' ? 'Монтаж на объекте' : 'Работа в цеху'],
+              ['Нужен с', formatDate(req.need_date)],
+              ['Вернуть до', formatDate(req.planned_return)],
+              req.issued_at && ['Выдан', new Date(req.issued_at).toLocaleString('ru-RU')],
+              req.approved_by_name && ['Выдал', req.approved_by_name],
+              req.actual_return && ['Принят', formatDate(req.actual_return)],
+              req.accepted_by_name && ['Принял', req.accepted_by_name],
+              req.return_condition && ['Состояние при возврате',
+                req.return_condition === 'needs_repair' ? '⚠️ Требует ремонта' : '✅ Рабочее'],
+              req.fine_amount > 0 && ['Штраф', formatSum(req.fine_amount)],
             ].filter(Boolean).map(([k,v]) => (
-              <div key={k} style={{padding:'10px',background:'#f9fafb',borderRadius:8}}>
-                <div style={{fontSize:11,color:'#6b7280',marginBottom:3}}>{k}</div>
-                <div style={{fontWeight:600}}>{v}</div>
+              <div key={k} style={{padding:'10px 12px',background:'var(--bg-warm)',borderRadius:8,border:'1px solid var(--border)'}}>
+                <div style={{fontSize:11,color:'var(--text-muted)',marginBottom:3}}>{k}</div>
+                <div style={{fontWeight:600,fontSize:13,wordBreak:'break-word'}}>{v}</div>
               </div>
             ))}
           </div>
 
           {req.notes && (
-            <div style={{marginTop:12,padding:12,background:'#f0f9ff',borderRadius:8,fontSize:13,color:'#1e40af'}}>
-              📝 {req.notes}
+            <div style={{marginTop:12,padding:'12px 14px',background:'var(--info-bg)',borderRadius:8,fontSize:13,color:'var(--info)'}}>
+              <strong>Заметка мастера:</strong> {req.notes}
             </div>
           )}
-
+          {req.return_notes && (
+            <div style={{marginTop:12,padding:'12px 14px',background:'var(--warning-bg)',borderRadius:8,fontSize:13,color:'var(--warning)'}}>
+              <strong>Заметка склада при приёме:</strong> {req.return_notes}
+            </div>
+          )}
           {req.rejection_reason && (
-            <div style={{marginTop:12,padding:12,background:'#fef2f2',borderRadius:8,fontSize:13,color:'#b91c1c'}}>
-              ❌ Причина отказа: {req.rejection_reason}
+            <div style={{marginTop:12,padding:'12px 14px',background:'var(--danger-bg)',borderRadius:8,fontSize:13,color:'var(--danger)'}}>
+              <strong>Причина отказа:</strong> {req.rejection_reason}
             </div>
           )}
 
-          {days > 0 && req.status === 'issued' && (
-            <div style={{marginTop:12,padding:12,background:'#fef2f2',borderRadius:8,fontSize:13,color:'#b91c1c',fontWeight:600}}>
-              ⚠️ Просрочка: {days} дней! {days > 7 ? `Штраф: ${formatSum((days-7)*100000)}` : 'До штрафа: '+(7-days)+' дн.'}
+          {isOverdue && (
+            <div style={{marginTop:12,padding:'12px 14px',background:'var(--danger-bg)',borderRadius:8,
+              borderLeft:'3px solid var(--danger)',fontSize:13,color:'var(--danger)',fontWeight:600}}>
+              Просрочка: {days} {days===1?'день':days<5?'дня':'дней'}.
+              {days > 7
+                ? ` Штраф: ${formatSum(projectedFine)}`
+                : ` До штрафа осталось ${7-days} дн.`}
+            </div>
+          )}
+
+          {/* Форма приёма (склад) */}
+          {accepting && (
+            <div style={{marginTop:16,padding:'16px',background:'var(--primary-l)',borderRadius:10,
+              border:'1px solid var(--isola-green-600)'}}>
+              <h3 style={{fontSize:14,marginBottom:12,color:'var(--isola-green-900)'}}>
+                Приём инструмента — проверьте состояние
+              </h3>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+                {[
+                  ['working',      '✅ Рабочее',         'Вернуть на склад'],
+                  ['needs_repair', '⚠️ Нужен ремонт',  'Отправить в ремонт'],
+                ].map(([v,lbl,sub])=>(
+                  <label key={v} style={{
+                    cursor:'pointer',padding:'12px',
+                    background:'#fff',
+                    border:`2px solid ${acceptCondition===v ? 'var(--isola-green-700)' : 'var(--border)'}`,
+                    borderRadius:8,
+                    display:'flex',flexDirection:'column',gap:4,
+                  }}>
+                    <input type="radio" name="cond" value={v} style={{display:'none'}}
+                      checked={acceptCondition===v} onChange={()=>setAcceptCondition(v)} />
+                    <span style={{fontWeight:600,fontSize:13}}>{lbl}</span>
+                    <span style={{fontSize:11,color:'var(--text-muted)'}}>{sub}</span>
+                  </label>
+                ))}
+              </div>
+              <label className="form-label">Заметка о состоянии (опционально)</label>
+              <textarea className="form-input" rows={2}
+                placeholder={acceptCondition==='needs_repair'
+                  ? 'Опишите дефект: что не работает, какие признаки износа…'
+                  : 'Можно указать дату следующей проверки или любую заметку'}
+                value={acceptNotes} onChange={e=>setAcceptNotes(e.target.value)} />
+              {isOverdue && (
+                <p style={{marginTop:8,fontSize:12,color:'var(--text-muted)'}}>
+                  При подтверждении система автоматически {projectedFine > 0
+                    ? `начислит штраф ${formatSum(projectedFine)}`
+                    : 'отметит просрочку (без штрафа — менее 7 дней)'}.
+                </p>
+              )}
             </div>
           )}
 
           {reject && (
-            <div style={{marginTop:12}}>
-              <label className="form-label">{t('rejectionReason')}</label>
-              <textarea className="form-input" rows={2} value={reason} onChange={e=>setReason(e.target.value)} />
+            <div style={{marginTop:16}}>
+              <label className="form-label">Причина отказа</label>
+              <textarea className="form-input" rows={2} value={reason} onChange={e=>setReason(e.target.value)}
+                placeholder="Почему заявка отклонена…" />
             </div>
           )}
         </div>
 
-        {canAct && (
-          <div className="modal-footer">
-            {req.status === 'pending' && !reject && (
-              <>
-                <button className="btn btn-danger" onClick={()=>setReject(true)}>❌ {t('reject')}</button>
-                <button className="btn btn-success" onClick={()=>action('approve')} disabled={loading==='approve'}>
-                  {loading==='approve'?'⏳':'✅'} {t('approve')}
-                </button>
-              </>
-            )}
-            {reject && (
-              <>
-                <button className="btn btn-ghost" onClick={()=>setReject(false)}>{t('cancel')}</button>
-                <button className="btn btn-danger" onClick={()=>action('reject')} disabled={!reason||loading==='reject'}>
-                  {loading==='reject'?'⏳':'❌'} {t('reject')}
-                </button>
-              </>
-            )}
-            {req.status === 'issued' && (
-              <button className="btn btn-success" onClick={()=>action('return')} disabled={loading==='return'}>
-                {loading==='return'?'⏳':'📦'} {t('return')}
+        {/* Footer с действиями */}
+        <div className="modal-footer">
+          {/* Мастер: запрос на возврат / отмена запроса */}
+          {isMaster && req.status === 'issued' && (
+            <button className="btn btn-primary" onClick={()=>action('request-return')} disabled={loading==='request-return'}>
+              {loading==='request-return' ? 'Отправка…' : 'Готов вернуть — позвать склад'}
+            </button>
+          )}
+          {isMaster && req.status === 'return_requested' && (
+            <button className="btn btn-ghost" onClick={()=>action('cancel-return')} disabled={loading==='cancel-return'}>
+              {loading==='cancel-return' ? '…' : 'Отменить запрос'}
+            </button>
+          )}
+
+          {/* Склад / Нодир / Я: выдача и отклонение */}
+          {isWarehouseSide && req.status === 'pending' && !reject && (
+            <>
+              <button className="btn btn-danger" onClick={()=>setReject(true)}>Отклонить</button>
+              <button className="btn btn-success" onClick={()=>action('approve')} disabled={loading==='approve'}>
+                {loading==='approve' ? '…' : 'Выдать инструмент'}
               </button>
-            )}
-          </div>
-        )}
+            </>
+          )}
+          {isWarehouseSide && reject && (
+            <>
+              <button className="btn btn-ghost" onClick={()=>setReject(false)}>Отмена</button>
+              <button className="btn btn-danger" onClick={()=>action('reject')} disabled={!reason||loading==='reject'}>
+                {loading==='reject' ? '…' : 'Подтвердить отказ'}
+              </button>
+            </>
+          )}
+
+          {/* Склад: приём возврата */}
+          {isWarehouseSide && (req.status === 'issued' || req.status === 'return_requested') && !accepting && (
+            <button className="btn btn-primary" onClick={()=>setAccepting(true)}>
+              Принять инструмент
+            </button>
+          )}
+          {isWarehouseSide && accepting && (
+            <>
+              <button className="btn btn-ghost" onClick={()=>setAccepting(false)}>Отмена</button>
+              <button className="btn btn-primary" onClick={()=>action('accept-return')} disabled={loading==='accept-return'}>
+                {loading==='accept-return' ? 'Принимаем…'
+                  : acceptCondition==='needs_repair' ? 'Принять с дефектом' : 'Принять в рабочем виде'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -46,7 +46,12 @@ export default function Dashboard() {
       api.get('/requests', { params: isMaster ? {} : { status: 'issued' } }).then(r => r.data).catch(() => []),
     ]).then(([analytics, requests]) => {
       setData(analytics);
-      setMyRequests((requests || []).slice(0, 5));
+      // Для мастера — только активные (выдан / ждёт приёмки / просрочен)
+      const activeStatuses = ['issued', 'return_requested', 'overdue'];
+      const filtered = isMaster
+        ? (requests || []).filter(r => activeStatuses.includes(r.status))
+        : (requests || []);
+      setMyRequests(filtered.slice(0, 5));
     }).finally(() => setLoading(false));
   }, [user]);
 
@@ -153,8 +158,15 @@ export default function Dashboard() {
               <tbody>
                 {myRequests.map(r => {
                   const days = Math.floor((new Date() - new Date(r.planned_return)) / 86400000);
+                  const overdue = days > 0 && r.status !== 'returned';
+                  const isAwaiting = r.status === 'return_requested';
+                  const badge = isAwaiting
+                    ? { cls: 'badge-blue', label: 'Готов к приёмке' }
+                    : overdue
+                    ? { cls: 'badge-red',  label: 'Просрочен' }
+                    : { cls: 'badge-yellow', label: 'Выдан' };
                   return (
-                    <tr key={r.id} className={days > 0 ? 'row-overdue' : ''}>
+                    <tr key={r.id} className={overdue ? 'row-overdue' : ''}>
                       <td>
                         <strong>{r.tool_name}</strong>
                         <br />
@@ -162,14 +174,12 @@ export default function Dashboard() {
                       </td>
                       {!isMaster && <td>{r.master_name}</td>}
                       <td>{r.order_number}</td>
-                      <td className={days > 0 ? 'text-overdue' : days === 0 ? 'text-warning' : ''}>
+                      <td className={overdue ? 'text-overdue' : days === 0 ? 'text-warning' : ''}>
                         {formatDate(r.planned_return)}
-                        {days > 0 && <span> · +{days} дн.</span>}
+                        {overdue && <span> · +{days} дн.</span>}
                       </td>
                       <td>
-                        <span className={`badge-status badge-${days > 0 ? 'red' : 'green'}`}>
-                          {days > 0 ? 'Просрочен' : 'Выдан'}
-                        </span>
+                        <span className={`badge-status ${badge.cls}`}>{badge.label}</span>
                       </td>
                     </tr>
                   );
